@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gully Scorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main>
+<div class="top"><h1>New match</h1><a href="index.html">Back</a></div>
+<form id="f">
+  <div class="field" id="pa"></div><div class="field" id="pb"></div>
+  <div class="field"><label class="lbl" for="ov">Overs per side</label><input id="ov" type="number" min="1" max="50" value="6"></div>
+  <div class="field"><label class="lbl" for="tw">Toss won by</label><select id="tw"></select></div>
+  <div class="field"><label class="lbl" for="td">They chose to</label><select id="td"><option value="bat">Bat</option><option value="bowl">Bowl</option></select></div>
+  <p class="err" id="err" role="alert"></p>
+  <button class="btn" type="submit">Start match</button>
+</form>
+</main>
+<script src="js/config.js"></script>
+<script src="js/new.js"></script>
+</body>
+</html>

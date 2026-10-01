@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gully Scorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main>
+<div class="top"><h1 id="title"></h1><span id="sub"></span></div>
+<div class="hero" id="hero"></div>
+<div class="chase" id="chase"></div>
+<div class="tabs" role="tablist">
+  <button role="tab" id="t-score" aria-selected="true" onclick="tab('score')">Score</button>
+  <button role="tab" id="t-card" aria-selected="false" onclick="tab('card')">Scorecard</button>
+</div>
+<div id="view"></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/match.js"></script>
+</body>
+</html>
