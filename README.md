@@ -1,41 +1,94 @@
-# Gully Scorer (frontend + backend)
+# 🏏 CricketLive
 
-Ball-by-ball cricket scorer. Django REST API + plain HTML/CSS/JS frontend, one project, one command.
+A live, ball-by-ball cricket scoring web application. Score matches from your phone and share a live link so anyone can follow the match in real time.
 
-    python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
-    pip install -r requirements.txt
-    python manage.py migrate
-    python manage.py runserver
+Built with **Django + Django REST Framework** on the backend and **HTML, CSS & JavaScript** on the frontend.
 
-Open http://127.0.0.1:8000/  ->  New match.   Tests: python manage.py test scoring
+## Features
 
-    cricket_scorer/
-    ├── manage.py
-    ├── cricket_project/          settings.py, urls.py (also serves frontend/)
-    ├── scoring/                  BACKEND
-    │   ├── models.py             Team, Player, Match, Innings, Ball
-    │   ├── services.py           cricket rules: overs, extras, wickets, target, result, undo
-    │   ├── views.py  urls.py     REST API under /api/
-    │   ├── admin.py  tests.py  migrations/
-    └── frontend/                 FRONTEND
-        ├── index.html            match list + player stats
-        ├── new.html              new match setup
-        ├── match.html            ?id=1&mode=score (scorer)  |  ?id=1&mode=live (shareable live view)
-        ├── css/style.css
-        └── js/  config.js  home.js  new.js  match.js
+* 🏏 Ball-by-ball scoring — 0, 1, 2, 3, 4 and 6
+* ➕ Extras — Wides, No Balls, Byes and Leg Byes
+* 🏃 Wickets — Bowled, Caught, LBW, Stumped, Hit Wicket and Run Out
+* 🔄 Undo the last ball
+* 🎯 Automatic overs, target, runs needed and match result
+* 🔗 Shareable live match link
+* 📊 Batting and bowling scorecards
+* 👥 Reusable teams and Playing 11
+* 🏆 Top run scorers and wicket takers
+* 📱 Mobile-friendly design
+* 🔐 No login required for scoring
 
+## Tech Stack
 
-## Accounts, teams and records
+* **Backend:** Python, Django, Django REST Framework
+* **Frontend:** HTML, CSS, JavaScript
+* **Database:** SQLite
 
-- No login: anyone who opens the site can score. Share a read-only view with `match.html?id=1&mode=live`.
-- A team can be picked again and again for new matches. Typing the name of a saved team (with no new players) reuses it.
-- "Delete team" on the New match page only archives the team: it disappears from the pickers and its name can be reused,
-  but every match, scorecard and player stat stays. Teams in an unfinished match can't be deleted.
-- There is no way to delete a match from the app. Matches, innings, balls and teams are erased only from `/admin/`
-  (create an admin with `python manage.py createsuperuser`; untick "Is active" there to archive/restore a team).
+## Quick Start
 
-## Run out
+```bash
+git clone YOUR_REPOSITORY_URL
+cd CricketLive
 
-Tap **Run out** in the scoring screen, pick who is out, pick the end it happened at (the new batter takes that end,
-so strike is right even if the batters crossed), then tap the runs completed. Works off wides, no balls, byes and leg byes.
-The wicket counts for the team, not the bowler, and shows as "run out" on the scorecard. Undo restores both batters.
+python -m venv venv
+venv\Scripts\activate
+
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## How It Works
+
+1. Create or select two teams.
+2. Set overs and toss details.
+3. Select the bowler and start scoring.
+4. Record runs, extras and wickets ball by ball.
+5. Share the live match link with spectators.
+6. The match result and scorecard are updated automatically.
+
+## API
+
+| Method    | Endpoint                    | Description       |
+| --------- | --------------------------- | ----------------- |
+| GET, POST | `/api/teams/`               | Manage teams      |
+| GET, POST | `/api/matches/`             | Manage matches    |
+| GET       | `/api/matches/<id>/`        | Get match state   |
+| POST      | `/api/matches/<id>/ball/`   | Record a ball     |
+| POST      | `/api/matches/<id>/undo/`   | Undo last ball    |
+| POST      | `/api/matches/<id>/select/` | Select player     |
+| GET       | `/api/stats/`               | Player statistics |
+
+## Project Structure
+
+```text
+manage.py
+cricket_project/
+scoring/
+frontend/
+├── index.html
+├── new.html
+├── match.html
+├── css/
+└── js/
+requirements.txt
+README.md
+```
+
+## Tests
+
+```bash
+python manage.py test scoring
+```
+
+## Author
+
+**Ayush Chandel**
+
+Python / Django Developer
