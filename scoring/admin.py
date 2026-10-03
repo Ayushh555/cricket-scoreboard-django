@@ -10,10 +10,6 @@ class PlayerInline(admin.TabularInline):
 
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
-    # "Delete team" in the app only unticks is_active. Real deletion (and match records) lives here, in the admin.
-    list_display = ("name", "is_active")
-    list_filter = ("is_active",)
-    search_fields = ("name",)
     inlines = [PlayerInline]
 
 
