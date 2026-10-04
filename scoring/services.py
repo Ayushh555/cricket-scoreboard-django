@@ -15,9 +15,10 @@ BOWL_RANK = {"bowler": 0, "allrounder": 1, "batter": 2}   # who bowls first
 
 
 class RuleError(Exception):
-    def __init__(self, message, code="invalid"):
+    def __init__(self, message, code="invalid", **extra):
         super().__init__(message)
         self.code = code
+        self.extra = extra
 
 
 # ---------- setup ----------
@@ -56,6 +57,10 @@ def create_match(team_a, team_b, overs, toss_winner, decision):
         overs = int(overs)
     except (Team.DoesNotExist, TypeError, ValueError):
         raise RuleError("Pick two teams and a valid number of overs.")
+    live = Match.objects.filter(status=Match.Status.LIVE).first()
+    if live:
+        raise RuleError(f"A match is already in progress ({live}). Only one match can run at a time. "
+                        "End it before starting a new one.", "live_match", match_id=live.id, match_title=str(live))
     if a.pk == b.pk:
         raise RuleError("A team can't play itself.")
     if a.players.count() < 2 or b.players.count() < 2:
@@ -109,7 +114,7 @@ def _finish_innings(match, inn):
 
 
 @transaction.atomic
-def add_ball(match, runs=0, extra="", wicket="", dismissed=None):
+def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=""):
     inn = current_innings(match)
     if not inn:
         raise RuleError("This match is over.")
@@ -127,6 +132,8 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None):
         raise RuleError("Unknown extra.")
     if wicket not in [c[0] for c in Ball.Wicket.choices]:
         raise RuleError("Unknown dismissal.")
+    if end not in ("", "striker", "non"):
+        raise RuleError("Unknown end.")
 
     legal_before = inn.legal_balls
     legal = extra not in ILLEGAL
@@ -156,11 +163,19 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None):
         ball.dismissed_player = out
     ball.save()
 
-    # New state. Run-outs ignore crossing: the survivor stays, the new batter takes the dismissed slot.
-    if out:
-        s, n = (None, n) if out.id == s.id else (s, None)
-    if runs % 2 and wicket != "run_out":
-        s, n = n, s
+    # New state.
+    if wicket == "run_out":
+        # The dismissed batter is out at the end they were running to, unless the scorer says otherwise.
+        # The new batter takes that end; whoever stands at the striker's end faces the next ball.
+        if not end:
+            end = "non" if (out.id == s.id) == (runs % 2 == 0) else "striker"
+        survivor = n if out.id == s.id else s
+        s, n = (None, survivor) if end == "striker" else (survivor, None)
+    else:
+        if out:
+            s, n = (None, n) if out.id == s.id else (s, None)
+        if runs % 2:
+            s, n = n, s
     if legal and (legal_before + 1) % 6 == 0:
         s, n, bowler = n, s, None
     inn.striker, inn.non_striker, inn.bowler = s, n, bowler
@@ -348,6 +363,11 @@ def _live(m, cur, first_total):
     return d
 
 
+def _last_ball(m):
+    b = Ball.objects.filter(innings__match=m).order_by("-id").first()
+    return {"id": b.id, "runs": b.runs_off_bat, "wicket": bool(b.wicket_type)} if b else None
+
+
 def match_state(m):
     inns = list(m.innings.select_related("batting_team", "bowling_team", "striker", "non_striker", "bowler"))
     cur = next((i for i in inns if not i.is_complete), None)
@@ -358,6 +378,7 @@ def match_state(m):
                      "wickets": i.wickets, "overs": i.overs_display, "run_rate": i.run_rate,
                      **scorecard(i)} for i in inns],
         "live": _live(m, cur, inns[0].total_runs) if cur else None,
+        "last_ball": _last_ball(m),
     }
 
 

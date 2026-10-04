@@ -182,3 +182,51 @@ class DeletePlayer(TestCase):
         self.assertEqual(self.c.delete(f"/api/players/{pid}/").json()["code"], "live")   # team is in a live match
         self.c.post(f"/api/matches/{m}/end/")
         self.assertEqual(self.c.delete(f"/api/players/{pid}/").status_code, 200)         # finished and unplayed: fine
+
+
+class RunOutEnds(MatchFlow):
+    def test_default_end_even_runs_striker_out(self):
+        self.start_over(); s = self.state()["live"]
+        self.ball(runs=0, wicket="run_out")                      # striker out going to the non-striker's end
+        live = self.state()["live"]
+        self.assertEqual((live["striker"]["id"], live["non_striker"], live["need"]),
+                         (s["non_striker"]["id"], None, "batter"))   # survivor now faces; new batter at the other end
+
+    def test_explicit_end_gives_strike_to_new_batter(self):
+        self.start_over(); s = self.state()["live"]
+        self.ball(runs=1, wicket="run_out", dismissed=s["non_striker"]["id"], end="striker")
+        live = self.state()["live"]
+        self.assertEqual((live["striker"], live["non_striker"]["id"]), (None, s["striker"]["id"]))
+        self.assertEqual(self.ball(runs=0, end="sideways").status_code, 400)
+
+
+class OneMatchAtATime(MatchFlow):
+    def new_match(self):
+        t = {x["name"]: x["id"] for x in self.c.get("/api/teams/").json()}
+        return self.c.post("/api/matches/", {"team_a": t["Kings"], "team_b": t["Strikers"], "overs_limit": 2,
+                                              "toss_winner": t["Kings"], "toss_decision": "bat"}, format="json")
+
+    def test_second_match_blocked_until_first_is_ended(self):
+        r = self.new_match()                                   # setUp already started one
+        self.assertEqual((r.status_code, r.json()["code"], r.json()["match_id"]), (400, "live_match", self.m))
+        self.assertEqual(self.c.post(f"/api/matches/{self.m}/end/").status_code, 200)
+        self.assertEqual(self.new_match().status_code, 201)    # allowed once the first is ended
+        self.assertEqual(self.new_match().status_code, 400)    # and the new one blocks again
+
+    def test_finished_match_does_not_block(self):
+        self.c.post(f"/api/matches/{self.m}/end/")
+        self.assertEqual(self.new_match().status_code, 201)
+
+
+class LastBall(MatchFlow):
+    def test_last_ball_tracks_latest_delivery_and_undo(self):
+        self.assertIsNone(self.state()["last_ball"])
+        self.start_over()
+        self.ball(runs=4)
+        lb = self.state()["last_ball"]
+        self.assertEqual((lb["runs"], lb["wicket"]), (4, False))
+        self.ball(runs=6)
+        self.assertEqual(self.state()["last_ball"]["runs"], 6)
+        self.assertGreater(self.state()["last_ball"]["id"], lb["id"])
+        self.c.post(f"/api/matches/{self.m}/undo/")
+        self.assertEqual(self.state()["last_ball"]["id"], lb["id"])      # undo goes back to the earlier ball

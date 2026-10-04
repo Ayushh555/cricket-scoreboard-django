@@ -1,24 +1,42 @@
 let TEAMS=[];
 const $=id=>document.getElementById(id);
 const ROLES=[['allrounder','All-rounder'],['batter','Batter'],['bowler','Bowler']], SLOTS=11;
+const teamOpts=()=>TEAMS.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.players.length} players)</option>`).join('')+'<option value="new">+ New team</option>';
+function fillSelect(k){
+  const s=$('s'+k), cur=s.value; s.innerHTML=teamOpts();
+  s.value=[...s.options].some(o=>o.value===cur)?cur:(TEAMS.length?String(TEAMS[0].id):'new');
+}
+async function removeTeam(k,force){
+  const s=$('s'+k), id=+s.value, nm=s.selectedOptions[0].text.replace(/ \(\d+ players\)$/,'');
+  if(!force&&!confirm('Delete the team '+nm+'?'))return;
+  const r=await fetch(API_BASE+'/api/teams/'+id+'/'+(force?'?force=1':''),{method:'DELETE'}), j=await r.json();
+  if(r.ok){
+    TEAMS=await (await fetch(API_BASE+'/api/teams/')).json();
+    fillSelect('a'); fillSelect('b'); toss=null; refresh(); return;
+  }
+  if(j.code==='in_use'&&confirm(j.error))return removeTeam(k,true);
+  if(j.code!=='in_use')alert(j.error||'Could not delete the team.');
+}
 function panel(k){
   const rows=Array.from({length:SLOTS},(_,i)=>`<div class="pl"><span class="no">${i+1}</span>
       <input id="pn${k}${i}" placeholder="Player ${i+1}" aria-label="Player ${i+1} name" autocomplete="off">
       <select id="pr${k}${i}" aria-label="Player ${i+1} role">${ROLES.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select></div>`).join('');
   $('p'+k).innerHTML=`<label class="lbl" for="s${k}">Team ${k.toUpperCase()}</label>
-   <select id="s${k}">${TEAMS.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.players.length} players)</option>`).join('')}<option value="new">+ New team</option></select>
+   <select id="s${k}">${teamOpts()}</select>
+   <button type="button" class="del sm delteam" id="dt${k}">Delete this team</button>
    <div id="n${k}" hidden>
      <input id="nm${k}" placeholder="Team name" aria-label="Team name" style="margin-top:8px">
      <h3 class="xi">Playing 11</h3>
      <span class="lbl">Fill at least 2 boxes and leave the rest empty if you have fewer players. Batters open the innings, bowlers and all-rounders bowl.</span>
      ${rows}
    </div>`;
-  $('s'+k).onchange=refresh; $('nm'+k).oninput=refresh;
+  $('s'+k).onchange=refresh; $('nm'+k).oninput=refresh; $('dt'+k).onclick=()=>removeTeam(k);
   if(!TEAMS.length)$('s'+k).value='new';
+  else if(k==='b'&&TEAMS.length>1)$('sb').value=String(TEAMS[1].id);   // a different team from Team A by default
 }
 function name(k){const s=$('s'+k);return s.value==='new'?($('nm'+k).value||'Team '+k.toUpperCase()):s.selectedOptions[0].text.replace(/ \(\d+ players\)$/,'')}
 function refresh(){
-  ['a','b'].forEach(k=>{if($('n'+k))$('n'+k).hidden=$('s'+k).value!=='new'});
+  ['a','b'].forEach(k=>{if($('n'+k)){$('n'+k).hidden=$('s'+k).value!=='new';$('dt'+k).hidden=$('s'+k).value==='new'}});
   const cc=$('caller').value||'a';
   $('caller').innerHTML=`<option value="a">${esc(name('a'))}</option><option value="b">${esc(name('b'))}</option>`;$('caller').value=cc;
   renderToss();
@@ -77,6 +95,24 @@ function tossValue(){
   if(!toss.decision)throw new Error(name(toss.winner)+' won the toss. Choose bat first or bowl first.');
   return {w:toss.winner,d:toss.decision};
 }
+// ---------- only one match can run at a time ----------
+async function checkLive(){
+  const box=$('livewarn');
+  try{
+    const live=(await (await fetch(API_BASE+'/api/matches/')).json()).find(m=>m.status==='live');
+    $('startbtn').disabled=!!live;
+    if(!live){box.innerHTML='';return}
+    box.innerHTML=`<div class="warn" role="alert"><b>A match is already in progress</b>
+      <span>${esc(live.title)}: ${live.scores.map(esc).join('  |  ')||'not started'}. Only one match can run at a time.</span>
+      <div class="wact"><a class="bbtn2" href="match.html?id=${live.id}&mode=score">Continue scoring</a>
+      <button type="button" class="del sm" id="endlive">End this match</button></div></div>`;
+    $('endlive').onclick=async()=>{
+      if(!confirm('End "'+live.title+'" now? The result is worked out from the current score.'))return;
+      const r=await fetch(API_BASE+'/api/matches/'+live.id+'/end/',{method:'POST'});
+      if(r.ok)checkLive(); else alert('Could not end the match.');
+    };
+  }catch(e){}
+}
 $('f').onsubmit=async e=>{
   e.preventDefault();$('err').textContent='';
   try{
@@ -84,8 +120,9 @@ $('f').onsubmit=async e=>{
     const a=await teamId('a'), b=await teamId('b');
     const r=await fetch(API_BASE+'/api/matches/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       team_a:a,team_b:b,overs_limit:+$('ov').value,toss_winner:t.w==='a'?a:b,toss_decision:t.d})});
-    const j=await r.json(); if(!r.ok)throw new Error(j.error);
+    const j=await r.json(); if(!r.ok){if(j.code==='live_match')checkLive();throw new Error(j.error)}
     location.href='match.html?id='+j.id+'&mode=score';
   }catch(x){$('err').textContent=x.message}
 };
+checkLive();
 (async()=>{TEAMS=await (await fetch(API_BASE+'/api/teams/')).json();panel('a');panel('b');refresh();})();

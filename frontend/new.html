@@ -12,6 +12,7 @@
 <body>
 <main>
 <div class="top"><h1>New match</h1><a href="index.html">Back</a></div>
+<div id="livewarn"></div>
 <form id="f">
   <div class="field" id="pa"></div><div class="field" id="pb"></div>
   <div class="field"><label class="lbl" for="ov">Overs per side</label><input id="ov" type="number" min="1" max="50" value="6"></div>
@@ -40,7 +41,7 @@
     </div>
   </div>
   <p class="err" id="err" role="alert"></p>
-  <button class="btn" type="submit">Start match</button>
+  <button class="btn" type="submit" id="startbtn">Start match</button>
 </form>
 </main>
 <script src="js/config.js"></script>

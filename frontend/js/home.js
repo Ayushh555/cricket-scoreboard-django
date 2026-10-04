@@ -30,7 +30,7 @@ document.documentElement.classList.add('js');
         <div class="bline">${line}</div>
         <div class="bact"><a class="bbtn" href="match.html?id=${s.id}&mode=score">Continue scoring</a><a class="blink" href="match.html?id=${s.id}&mode=live">Watch view</a></div>
         ${live.length>1?`<a class="more" href="history.html">+ ${live.length-1} more live ${live.length-1===1?'match':'matches'}</a>`:''}
-      </section><a class="big" href="new.html"><b>New match</b><small>Start another one</small></a>`;
+      </section><button class="big end" type="button" id="endlive" data-id="${s.id}" data-title="${esc(s.title)}"><b>End this match</b><small>Only one match can run at a time. End it to start a new one.</small></button>`;
     }else{
       h=`<a class="big primary" href="new.html"><b>New match</b><small>Pick teams, toss and start scoring</small></a>`;
       if(!ms.length)h+=`<section class="steps rv"><h2>How it works</h2><ol>
@@ -45,6 +45,13 @@ document.documentElement.classList.add('js');
       lastScore=key;lastMatch=s.id;
     }else{lastScore=null;lastMatch=null}
   }
+
+  $('hero').addEventListener('click',async e=>{
+    const b=e.target.closest('#endlive'); if(!b)return;
+    if(!confirm('End "'+b.dataset.title+'" now? The result is worked out from the current score.'))return;
+    const r=await fetch(API_BASE+'/api/matches/'+b.dataset.id+'/end/',{method:'POST'});
+    if(r.ok)load(); else alert('Could not end the match.');
+  });
 
   // ---------- numbers ----------
   function renderNumbers(ms,t){

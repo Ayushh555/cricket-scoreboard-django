@@ -15,7 +15,7 @@ def rules(fn):
         try:
             return fn(request, *a, **kw)
         except svc.RuleError as e:
-            return Response({"error": str(e), "code": e.code}, status=400)
+            return Response({"error": str(e), "code": e.code, **e.extra}, status=400)
     return wrapper
 
 
@@ -80,7 +80,7 @@ def end(request, pk):
 def ball(request, pk):
     d = request.data
     svc.add_ball(get_object_or_404(Match, pk=pk), d.get("runs", 0), d.get("extra") or "",
-                 d.get("wicket") or "", d.get("dismissed"))
+                 d.get("wicket") or "", d.get("dismissed"), d.get("end") or "")
     return _state(pk)
 
 
