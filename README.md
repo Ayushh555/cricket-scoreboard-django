@@ -1,25 +1,85 @@
-# The Crease (frontend + backend)
+# The Crease 🏏
 
-Ball-by-ball cricket scorer. Django REST API + plain HTML/CSS/JS frontend, one project, one command.
+**The Crease** is a Django-based cricket scoring web application designed for simple and easy match scoring. It allows users to manage cricket matches and keep track of scores, runs, wickets, and other match details.
 
-    python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
-    pip install -r requirements.txt
-    python manage.py migrate
-    python manage.py runserver
+## Features
 
-Open http://127.0.0.1:8000/  ->  New match.   Tests: python manage.py test scoring
+* 🏏 Live cricket score tracking
+* 📊 Ball-by-ball scoring
+* ➕ Runs and extras management
+* ❌ Wicket tracking
+* 👥 Team and player management
+* 📱 Simple and responsive interface
+* ⚡ Fast and easy-to-use scoring system
 
-    cricket_scorer/
-    ├── manage.py
-    ├── cricket_project/          settings.py, urls.py (also serves frontend/)
-    ├── scoring/                  BACKEND
-    │   ├── models.py             Team, Player, Match, Innings, Ball
-    │   ├── services.py           cricket rules: overs, extras, wickets, target, result, undo
-    │   ├── views.py  urls.py     REST API under /api/
-    │   ├── admin.py  tests.py  migrations/
-    └── frontend/                 FRONTEND
-        ├── index.html            match list + player stats
-        ├── new.html              new match setup
-        ├── match.html            ?id=1&mode=score (scorer)  |  ?id=1&mode=live (shareable live view)
-        ├── css/style.css
-        └── js/  config.js  home.js  new.js  match.js
+## Technologies Used
+
+* **Python**
+* **Django**
+* **Django REST Framework**
+* **HTML**
+* **CSS**
+* **JavaScript**
+* **SQLite**
+
+## Project Structure
+
+```text
+cricket_scorer_complete/
+│
+├── frontend/
+├── backend/
+├── manage.py
+├── requirements.txt
+└── README.md
+```
+
+## How to Run
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Ayushh555/cricket-scoreboard-django.git
+cd cricket-scoreboard-django
+```
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run migrations:
+
+```bash
+python manage.py migrate
+```
+
+Start the development server:
+
+```bash
+python manage.py runserver
+```
+
+Open the application in your browser:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## Purpose
+
+The project was created to provide a simple digital solution for managing cricket scores and match information without relying on manual scorekeeping.
+
+## Author
+
+**Ayush Chandel**
+
+GitHub: https://github.com/Ayushh555
