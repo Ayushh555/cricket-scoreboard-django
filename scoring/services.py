@@ -37,40 +37,22 @@ def create_team(name, players):
         raise RuleError("A team needs at least 2 players.")
     if len(roster) > 30:
         raise RuleError("That is too many players for one team.")
-    if Team.objects.filter(name__iexact=name, is_active=True).exists():
-        raise RuleError(f"{name} already exists. Pick it from the list, or use a different name.")
+    if Team.objects.filter(name__iexact=name).exists():
+        raise RuleError("A team with that name already exists.")
     team = Team.objects.create(name=name)
     Player.objects.bulk_create([Player(name=n, role=r, team=team) for n, r in roster])
     return team
 
 
-def delete_team(team_id):
-    """Archive a team. Its matches, scorecards and player stats stay in the records (only the admin can erase those)."""
-    team = Team.objects.filter(pk=team_id, is_active=True).first()
-    if team is None:
-        raise RuleError("That team doesn't exist.")
-    if Match.objects.filter(Q(team_a=team) | Q(team_b=team)).exclude(status=Match.Status.COMPLETED).exists():
-        raise RuleError(f"{team.name} is in a match that isn't finished yet.")
-    team.is_active = False
-    team.save(update_fields=["is_active"])
-
-
 def _new_innings(match, number, bat, bowl):
-    p = sorted(bat.players.order_by("id"), key=lambda x: BAT_RANK[x.role])[:2]  # batters open
-    return Innings.objects.create(
-        match=match, number=number, batting_team=bat, bowling_team=bowl,
-        striker=p[0], non_striker=p[1],
-    )
+    # Openers and the first bowler are chosen by the scorer, so the crease starts empty.
+    return Innings.objects.create(match=match, number=number, batting_team=bat, bowling_team=bowl)
 
 
 @transaction.atomic
 def create_match(team_a, team_b, overs, toss_winner, decision):
-    live = Match.objects.filter(status=Match.Status.LIVE).first()
-    if live:
-        raise RuleError(f"{live} is still being played. Finish it before starting a new match.",
-                        code="match_live")
     try:
-        a, b = Team.objects.get(pk=team_a, is_active=True), Team.objects.get(pk=team_b, is_active=True)
+        a, b = Team.objects.get(pk=team_a), Team.objects.get(pk=team_b)
         overs = int(overs)
     except (Team.DoesNotExist, TypeError, ValueError):
         raise RuleError("Pick two teams and a valid number of overs.")
@@ -127,7 +109,7 @@ def _finish_innings(match, inn):
 
 
 @transaction.atomic
-def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=None):
+def add_ball(match, runs=0, extra="", wicket="", dismissed=None):
     inn = current_innings(match)
     if not inn:
         raise RuleError("This match is over.")
@@ -163,8 +145,6 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=None):
     else:
         ball.runs_off_bat = runs
 
-    if end not in (None, "", "striker", "non_striker"):
-        raise RuleError("Unknown end.")
     out = None
     if wicket:
         allowed = {WD: ("stumped", "run_out", "hit_wicket"), NB: ("run_out",)}.get(extra)
@@ -176,13 +156,10 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=None):
         ball.dismissed_player = out
     ball.save()
 
-    # New state. A run-out can happen at either end, whoever is out, so the scorer says which end it was at:
-    # the new batter takes that end and the survivor keeps the other. By default the dismissed batter's own end.
+    # New state. Run-outs ignore crossing: the survivor stays, the new batter takes the dismissed slot.
     if out:
-        end = end if wicket == "run_out" and end else ("striker" if out.id == s.id else "non_striker")
-        survivor = n if out.id == s.id else s
-        s, n = (None, survivor) if end == "striker" else (survivor, None)
-    elif runs % 2:
+        s, n = (None, n) if out.id == s.id else (s, None)
+    if runs % 2 and wicket != "run_out":
         s, n = n, s
     if legal and (legal_before + 1) % 6 == 0:
         s, n, bowler = n, s, None
@@ -194,6 +171,47 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=None):
         _finish_innings(match, inn)
     else:
         inn.save()
+
+
+@transaction.atomic
+def end_match(match):
+    """Stop the match now. If the chase had started, the result comes from the current scores."""
+    if match.status == Match.Status.COMPLETED:
+        raise RuleError("This match has already finished.")
+    inns = list(match.innings.order_by("number"))
+    chase_started = len(inns) == 2 and inns[1].balls.exists()
+    for i in inns:
+        i.is_complete = True
+        i.save()
+    match.status = Match.Status.COMPLETED
+    match.result = compute_result(match) + " (match ended early)" if chase_started else "Match ended early"
+    match.save()
+
+
+@transaction.atomic
+def delete_team(team, force=False):
+    matches = Match.objects.filter(Q(team_a=team) | Q(team_b=team))
+    n = matches.count()
+    if n and not force:
+        raise RuleError(f"{team.name} has played in {_plural(n, 'match')}. Deleting the team also deletes "
+                        f"{'that match' if n == 1 else 'those matches'} and the scores. Delete anyway?", "in_use")
+    matches.delete()
+    team.delete()
+
+
+@transaction.atomic
+def delete_player(player):
+    team = player.team
+    if Match.objects.filter(Q(team_a=team) | Q(team_b=team), status=Match.Status.LIVE).exists():
+        raise RuleError(f"{team.name} is in a live match. End or finish that match before changing its players.", "live")
+    played = Ball.objects.filter(Q(batter=player) | Q(non_striker=player) | Q(bowler=player)
+                                 | Q(dismissed_player=player)).exists()
+    if played:
+        raise RuleError(f"{player.name} has played in a match, so removing them would break that scorecard. "
+                        "Delete those matches first.", "played")
+    if team.players.count() <= 2:
+        raise RuleError("A team needs at least 2 players.", "min")
+    player.delete()
 
 
 def _used_batters(inn):
@@ -250,15 +268,6 @@ def undo(match):
     inn.save()
     ball.delete()
     match.status, match.result = Match.Status.LIVE, ""
-    match.save()
-
-
-def end_match(match):
-    """Stop a live match for good. Its balls and stats stay; there is just no result."""
-    if match.status != Match.Status.LIVE:
-        raise RuleError("This match is not live.", code="not_live")
-    match.innings.filter(is_complete=False).update(is_complete=True)
-    match.status, match.result = Match.Status.COMPLETED, "Match ended early. No result."
     match.save()
 
 
@@ -329,7 +338,7 @@ def _live(m, cur, first_total):
     d = {
         "innings": cur.number, "striker": p(cur.striker), "non_striker": p(cur.non_striker),
         "bowler": p(cur.bowler), "need": need, "options": [p(o) for o in opts],
-        "over_no": over_idx + 1,
+        "over_no": over_idx + 1, "opening": not cur.balls.exists(),
         "this_over": [dict(t=t, k=k) for t, k in map(label, cur.balls.filter(over_number=over_idx))],
         "balls_left": m.overs_limit * 6 - legal, "target": None, "runs_needed": None,
     }
@@ -375,5 +384,10 @@ def player_stats():
                 "overs": f"{r['legal'] // 6}.{r['legal'] % 6}", "runs": r["off_bat"] + r["pen"],
                 "wickets": r["wkts"],
                 "econ": round((r["off_bat"] + r["pen"]) * 6 / r["legal"], 1) if r["legal"] else 0} for r in bowl]
-    return {"batting": sorted(batting, key=lambda x: -x["runs"])[:10],
+    agg = Ball.objects.aggregate(
+        bat=Coalesce(Sum("runs_off_bat"), 0), extra=Coalesce(Sum("extra_runs"), 0),
+        wickets=Count("id", filter=~Q(wicket_type="")), sixes=Count("id", filter=Q(runs_off_bat=6)))
+    totals = {"matches": Match.objects.count(), "teams": Team.objects.count(),
+              "runs": agg["bat"] + agg["extra"], "wickets": agg["wickets"], "sixes": agg["sixes"]}
+    return {"totals": totals, "batting": sorted(batting, key=lambda x: -x["runs"])[:10],
             "bowling": sorted(bowling, key=lambda x: (-x["wickets"], x["econ"]))[:10]}

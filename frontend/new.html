@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gully Scorer</title>
+<title>The Crease</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<script src="js/theme.js"></script>
 </head>
 <body>
 <main>
@@ -14,8 +15,30 @@
 <form id="f">
   <div class="field" id="pa"></div><div class="field" id="pb"></div>
   <div class="field"><label class="lbl" for="ov">Overs per side</label><input id="ov" type="number" min="1" max="50" value="6"></div>
-  <div class="field"><label class="lbl" for="tw">Toss won by</label><select id="tw"></select></div>
-  <div class="field"><label class="lbl" for="td">They chose to</label><select id="td"><option value="bat">Bat</option><option value="bowl">Bowl</option></select></div>
+  <div class="field toss">
+    <span class="lbl">Toss</span>
+    <div class="seg" role="tablist" aria-label="Toss type">
+      <button type="button" class="tmode" data-m="virtual" role="tab" aria-selected="true">Virtual toss</button>
+      <button type="button" class="tmode" data-m="manual" role="tab" aria-selected="false">Set manually</button>
+    </div>
+    <div id="vtoss">
+      <label class="lbl" for="caller" style="margin-top:12px">Who calls?</label><select id="caller"></select>
+      <span class="lbl" style="margin-top:12px">They call</span>
+      <div class="seg" role="group" aria-label="Call">
+        <button type="button" class="call" data-c="heads" aria-selected="true">Heads</button>
+        <button type="button" class="call" data-c="tails" aria-selected="false">Tails</button>
+      </div>
+      <div class="coinwrap" aria-hidden="true"><div class="coinbox" id="coinbox"><div class="coin" id="coin">
+        <div class="face h">H</div><div class="face t">T</div></div></div></div>
+      <button class="btn" type="button" id="flip">Flip the coin</button>
+      <div id="tossres" aria-live="polite"></div>
+    </div>
+    <div id="mtoss" hidden>
+      <label class="lbl" for="tw" style="margin-top:12px">Toss won by</label><select id="tw"></select>
+      <label class="lbl" for="td" style="margin-top:12px">They chose to</label>
+      <select id="td"><option value="bat">Bat</option><option value="bowl">Bowl</option></select>
+    </div>
+  </div>
   <p class="err" id="err" role="alert"></p>
   <button class="btn" type="submit">Start match</button>
 </form>

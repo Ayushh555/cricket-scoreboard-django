@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("api/teams/", views.teams),
     path("api/teams/<int:pk>/", views.team_detail),
+    path("api/players/<int:pk>/", views.player_detail),
     path("api/matches/", views.matches),
     path("api/matches/<int:pk>/", views.match_detail),
     path("api/matches/<int:pk>/ball/", views.ball),

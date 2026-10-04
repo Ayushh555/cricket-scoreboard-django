@@ -1,11 +1,12 @@
 from functools import wraps
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from . import services as svc
-from .models import Match, Team
+from .models import Match, Player, Team
 
 
 def rules(fn):
@@ -19,27 +20,29 @@ def rules(fn):
 
 
 # ---------- API ----------
-def _team_list():
-    return Response([{"id": t.id, "name": t.name, "players": [p.name for p in t.players.order_by("id")],
-                      "roster": [{"name": p.name, "role": p.role} for p in t.players.order_by("id")]}
-                     for t in Team.objects.filter(is_active=True).prefetch_related("players")])
-
-
 @api_view(["GET", "POST"])
 @rules
 def teams(request):
     if request.method == "POST":
         svc.create_team(request.data.get("name"), request.data.get("players") or [])
-    return _team_list()
+    return Response([{"id": t.id, "name": t.name, "players": [p.name for p in t.players.order_by("id")],
+                      "roster": [{"id": p.id, "name": p.name, "role": p.role} for p in t.players.order_by("id")],
+                      "matches": Match.objects.filter(Q(team_a=t) | Q(team_b=t)).count()}
+                     for t in Team.objects.prefetch_related("players")])
 
 
-# Deleting a team only archives it: its matches and stats stay. There is deliberately no API to delete matches;
-# match records can only be erased from the admin site.
 @api_view(["DELETE"])
 @rules
 def team_detail(request, pk):
-    svc.delete_team(pk)
-    return _team_list()
+    svc.delete_team(get_object_or_404(Team, pk=pk), request.query_params.get("force") == "1")
+    return Response({"ok": True})
+
+
+@api_view(["DELETE"])
+@rules
+def player_detail(request, pk):
+    svc.delete_player(get_object_or_404(Player, pk=pk))
+    return Response({"ok": True})
 
 
 @api_view(["GET", "POST"])
@@ -50,15 +53,25 @@ def matches(request):
         m = svc.create_match(d.get("team_a"), d.get("team_b"), d.get("overs_limit", 6),
                              d.get("toss_winner"), d.get("toss_decision"))
         return Response(svc.match_state(m), status=201)
-    return Response([svc.match_brief(m) for m in Match.objects.all()])
+    return Response([svc.match_brief(m) for m in Match.objects.all()[:30]])
 
 
 def _state(pk):
     return Response(svc.match_state(get_object_or_404(Match, pk=pk)))
 
 
-@api_view(["GET"])
+@api_view(["GET", "DELETE"])
 def match_detail(request, pk):
+    if request.method == "DELETE":
+        get_object_or_404(Match, pk=pk).delete()
+        return Response({"ok": True})
+    return _state(pk)
+
+
+@api_view(["POST"])
+@rules
+def end(request, pk):
+    svc.end_match(get_object_or_404(Match, pk=pk))
     return _state(pk)
 
 
@@ -67,7 +80,7 @@ def match_detail(request, pk):
 def ball(request, pk):
     d = request.data
     svc.add_ball(get_object_or_404(Match, pk=pk), d.get("runs", 0), d.get("extra") or "",
-                 d.get("wicket") or "", d.get("dismissed"), d.get("end"))
+                 d.get("wicket") or "", d.get("dismissed"))
     return _state(pk)
 
 
@@ -75,13 +88,6 @@ def ball(request, pk):
 @rules
 def undo(request, pk):
     svc.undo(get_object_or_404(Match, pk=pk))
-    return _state(pk)
-
-
-@api_view(["POST"])
-@rules
-def end(request, pk):
-    svc.end_match(get_object_or_404(Match, pk=pk))
     return _state(pk)
 
 

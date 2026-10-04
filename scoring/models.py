@@ -1,19 +1,10 @@
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q, Sum
-from django.db.models.functions import Lower
+from django.db.models import Sum
 
 
 class Team(models.Model):
-    # Not globally unique: deleting a team in the app only archives it (is_active=False), so old matches keep
-    # their team. An archived team's name can be used again; active teams still need distinct names.
-    name = models.CharField(max_length=100)
-    is_active = models.BooleanField(default=True, help_text="Untick to hide the team from new matches (old matches keep it).")
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(Lower("name"), condition=Q(is_active=True), name="unique_active_team_name"),
-        ]
+    name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.name

@@ -3,17 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gully Scorer</title>
+<title>The Crease</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<script src="js/theme.js"></script>
 </head>
 <body>
 <main>
-<div class="top"><h1>The Crease</h1><a class="btn" href="new.html">New match</a></div>
-<h2>Current match</h2><div id="matches">Loading...</div>
-<h2>Top run scorers</h2><div class="wrap"><table id="bat"></table></div>
-<h2>Top wicket takers</h2><div class="wrap"><table id="bowl"></table></div>
+<div class="brand">
+  <button id="theme" class="themebtn" type="button" aria-label="Switch between light and dark theme">
+    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z"/></svg>
+    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+  </button>
+  <div class="pitch" aria-hidden="true"><span class="ball"></span><span class="line"></span></div>
+  <h1 aria-label="The Crease"><span class="the" aria-hidden="true">The</span><span class="word" aria-hidden="true"><span style="--i:0">C</span><span style="--i:1">r</span><span style="--i:2">e</span><span style="--i:3">a</span><span style="--i:4">s</span><span style="--i:5">e</span></span></h1>
+  <p>Ball-by-ball cricket scoring for the street. Share the live score with everyone.</p>
+</div>
+<div id="hero"></div>
+<div id="numbers"></div>
+<nav class="tiles rv" aria-label="Sections">
+  <a class="tile" href="history.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>History</a>
+  <a class="tile" href="stats.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Stats</a>
+  <a class="tile" href="teams.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M17 11a3 3 0 100-6M21 20c0-2.5-1.6-4.6-4-5.5"/></svg>Teams</a>
+</nav>
+<div id="recent"></div>
+<div id="perf"></div>
+<p id="srv" class="err" role="alert"></p>
+<p class="ver">Build 3 Oct 2026, v5 (virtual toss + delete players)</p>
 </main>
 <script src="js/config.js"></script>
 <script src="js/home.js"></script>

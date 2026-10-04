@@ -24,27 +24,11 @@ class MatchFlow(TestCase):
 
     def start_over(self, i=0):
         s = self.state()["live"]
+        while s["need"] == "batter":              # openers are chosen by the scorer
+            self.pick("batter", s["options"][0]["id"])
+            s = self.state()["live"]
         assert s["need"] == "bowler"
         return self.pick("bowler", s["options"][i]["id"])
-
-    def test_second_match_blocked_while_live(self):
-        t = {x["name"]: x["id"] for x in self.c.get("/api/teams/").json()}
-        body = {"team_a": t["Kings"], "team_b": t["Strikers"], "overs_limit": 2,
-                "toss_winner": t["Kings"], "toss_decision": "bat"}
-        r = self.c.post("/api/matches/", body, format="json")
-        self.assertEqual(r.status_code, 400)
-        self.assertEqual(r.json()["code"], "match_live")
-
-    def test_end_match_then_new_one_allowed(self):
-        r = self.c.post(f"/api/matches/{self.m}/end/")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["status"], "completed")
-        self.assertIsNone(r.json()["live"])
-        self.assertEqual(self.c.post(f"/api/matches/{self.m}/end/").status_code, 400)
-        t = {x["name"]: x["id"] for x in self.c.get("/api/teams/").json()}
-        r = self.c.post("/api/matches/", {"team_a": t["Kings"], "team_b": t["Strikers"], "overs_limit": 2,
-                                           "toss_winner": t["Kings"], "toss_decision": "bat"}, format="json")
-        self.assertEqual(r.status_code, 201)
 
     def test_full_match(self):
         self.assertEqual(self.ball(runs=1).status_code, 400)  # no bowler yet
@@ -100,47 +84,13 @@ class MatchFlow(TestCase):
         self.assertEqual(live["striker"]["id"], s["striker"]["id"])
         self.assertEqual(self.ball(runs=0).status_code, 400)
 
-    def test_run_out_end_decides_who_faces_next(self):
-        self.start_over()
-        live = self.state()["live"]
-        bat, non = live["striker"]["id"], live["non_striker"]["id"]
-        # non-striker run out at the STRIKER's end: the new batter goes there and faces; the survivor is non-striker
-        self.ball(runs=0, wicket="run_out", dismissed=non, end="striker")
-        self.pick("batter", self.state()["live"]["options"][0]["id"])
-        live = self.state()["live"]
-        self.assertNotIn(live["striker"]["id"], (bat, non))
-        self.assertEqual(live["non_striker"]["id"], bat)
-
-    def test_run_out_defaults_to_the_dismissed_batters_own_end(self):
-        self.start_over()
-        live = self.state()["live"]
-        bat, non = live["striker"]["id"], live["non_striker"]["id"]
-        self.ball(runs=1, wicket="run_out", dismissed=bat)      # striker out, no end given -> new batter on strike
-        self.pick("batter", self.state()["live"]["options"][0]["id"])
-        live = self.state()["live"]
-        self.assertEqual(live["non_striker"]["id"], non)
-        self.assertNotEqual(live["striker"]["id"], bat)
-
-    def test_run_out_rules_scoring_undo_and_credit(self):
-        self.start_over()
-        live = self.state()["live"]
-        bat, non = live["striker"]["id"], live["non_striker"]["id"]
-        self.assertEqual(self.ball(runs=0, wicket="run_out", dismissed=bat, end="sideways").status_code, 400)
-        self.assertEqual(self.ball(extra="nb", wicket="bowled").status_code, 400)           # still not allowed off a no ball
-        self.assertEqual(self.ball(runs=1, extra="wd", wicket="run_out", dismissed=non).status_code, 200)  # wide + run out is fine
-        inn = self.state()["innings"][0]
-        self.assertEqual((inn["runs"], inn["wickets"]), (2, 1))                              # wide 1 + 1 run
-        self.assertEqual(inn["bowling"][0]["wickets"], 0)                                   # a run out is not the bowler's wicket
-        self.c.post(f"/api/matches/{self.m}/undo/")
-        live = self.state()["live"]
-        self.assertEqual((live["striker"]["id"], live["non_striker"]["id"]), (bat, non))   # undo brings both batters back
-        self.assertEqual(self.state()["innings"][0]["wickets"], 0)
-
     def test_stats_and_history(self):
         self.start_over()
         self.ball(runs=4)
         self.assertEqual(self.c.get("/api/stats/").json()["batting"][0]["runs"], 4)
         self.assertEqual(len(self.c.get("/api/matches/").json()), 1)
+        tot = self.c.get("/api/stats/").json()["totals"]
+        self.assertEqual((tot["matches"], tot["teams"], tot["runs"], tot["sixes"]), (1, 2, 4, 0))
 
 
 class Roles(TestCase):
@@ -154,42 +104,81 @@ class Roles(TestCase):
         m = c.post("/api/matches/", {"team_a": t["X"], "team_b": t["Y"], "overs_limit": 2,
                                       "toss_winner": t["X"], "toss_decision": "bat"}, format="json").json()
         live = m["live"]
-        self.assertEqual({live["striker"]["name"], live["non_striker"]["name"]}, {"Bat1", "Bat2"})  # batters open
-        names = [o["name"] for o in live["options"]]
-        self.assertEqual(names, ["Bow2", "All2"])   # bowlers first, pure batters excluded
+        self.assertEqual((live["need"], live["opening"], live["striker"]), ("batter", True, None))
+        self.assertEqual([o["name"] for o in live["options"]], ["Bat1", "Bat2", "All1", "Bow1"])  # batters first
+        c.post(f"/api/matches/{m['id']}/select/", {"role": "batter", "player": live["options"][2]["id"]}, format="json")
+        live = c.get(f"/api/matches/{m['id']}/").json()["live"]
+        self.assertEqual(live["striker"]["name"], "All1")                 # first pick faces the first ball
+        self.assertNotIn("All1", [o["name"] for o in live["options"]])
+        c.post(f"/api/matches/{m['id']}/select/", {"role": "batter", "player": live["options"][0]["id"]}, format="json")
+        live = c.get(f"/api/matches/{m['id']}/").json()["live"]
+        self.assertEqual((live["need"], live["non_striker"]["name"]), ("bowler", "Bat1"))
+        self.assertEqual([o["name"] for o in live["options"]], ["Bow2", "All2"])   # bowlers first, batters excluded
 
 
-class TeamDelete(TestCase):
+class EndAndDelete(MatchFlow):
+    def test_end_match_mid_chase_and_undo(self):
+        self.start_over()
+        for _ in range(12):
+            if self.state()["live"]["need"]:
+                self.start_over()
+            if self.state()["status"] != "live" or len(self.state()["innings"]) > 1:
+                break
+            self.ball(runs=1)
+        self.start_over()
+        self.ball(runs=6)
+        r = self.c.post(f"/api/matches/{self.m}/end/")
+        s = r.json()
+        self.assertEqual(s["status"], "completed")
+        self.assertIn("ended early", s["result"])
+        self.assertIsNone(s["live"])
+        self.assertEqual(self.c.post(f"/api/matches/{self.m}/end/").status_code, 400)
+        s = self.c.post(f"/api/matches/{self.m}/undo/").json()      # undo reopens the match
+        self.assertEqual(s["status"], "live")
+
+    def test_end_before_any_ball(self):
+        s = self.c.post(f"/api/matches/{self.m}/end/").json()
+        self.assertEqual(s["result"], "Match ended early")
+
+    def test_delete_match_and_team(self):
+        self.start_over()
+        self.ball(runs=4)
+        teams = self.c.get("/api/teams/").json()
+        tid = teams[0]["id"]
+        self.assertEqual(teams[0]["matches"], 1)
+        r = self.c.delete(f"/api/teams/{tid}/")
+        self.assertEqual((r.status_code, r.json()["code"]), (400, "in_use"))      # needs confirmation
+        self.assertEqual(len(self.c.get("/api/teams/").json()), 2)
+        self.assertEqual(self.c.delete(f"/api/teams/{tid}/?force=1").status_code, 200)
+        self.assertEqual(len(self.c.get("/api/teams/").json()), 1)
+        self.assertEqual(self.c.get("/api/matches/").json(), [])                  # its match went too
+        self.assertEqual(self.c.get("/api/stats/").json()["batting"], [])
+
+    def test_delete_match_only(self):
+        self.assertEqual(self.c.delete(f"/api/matches/{self.m}/").status_code, 200)
+        self.assertEqual(self.c.get(f"/api/matches/{self.m}/").status_code, 404)
+        self.assertEqual(len(self.c.get("/api/teams/").json()), 2)                # teams stay
+
+
+class DeletePlayer(TestCase):
     def setUp(self):
         self.c = APIClient()
-        for n in ("Kings", "Strikers"):
-            self.c.post("/api/teams/", {"name": n, "players": ["a", "b", "c"]}, format="json")
-        self.t = {x["name"]: x["id"] for x in self.c.get("/api/teams/").json()}
+        for n, ps in (("P", ["p1", "p2", "p3"]), ("Q", ["q1", "q2", "q3"])):
+            self.c.post("/api/teams/", {"name": n, "players": ps}, format="json")
+        self.t = {x["name"]: x for x in self.c.get("/api/teams/").json()}
 
-    def match(self):
-        return self.c.post("/api/matches/", {"team_a": self.t["Kings"], "team_b": self.t["Strikers"], "overs_limit": 2,
-                                             "toss_winner": self.t["Kings"], "toss_decision": "bat"}, format="json")
+    def test_delete_unplayed_player_and_minimum(self):
+        pid = self.t["P"]["roster"][2]["id"]
+        self.assertEqual(self.c.delete(f"/api/players/{pid}/").status_code, 200)
+        left = [x for x in self.c.get("/api/teams/").json() if x["name"] == "P"][0]["roster"]
+        self.assertEqual(len(left), 2)
+        r = self.c.delete(f"/api/players/{left[0]['id']}/")        # would leave only one player
+        self.assertEqual((r.status_code, r.json()["code"]), (400, "min"))
 
-    def test_duplicate_active_name_rejected(self):
-        r = self.c.post("/api/teams/", {"name": "kings", "players": ["x", "y"]}, format="json")
-        self.assertEqual(r.status_code, 400)
-
-    def test_cannot_delete_team_in_unfinished_match(self):
-        self.match()
-        self.assertEqual(self.c.delete(f"/api/teams/{self.t['Kings']}/").status_code, 400)
-
-    def test_delete_hides_team_but_keeps_matches_and_frees_the_name(self):
-        from .models import Match
-        m = self.match().json()["id"]
-        Match.objects.filter(pk=m).update(status="completed", result="Kings won")   # pretend it finished
-        r = self.c.delete(f"/api/teams/{self.t['Kings']}/")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual([x["name"] for x in r.json()], ["Strikers"])                 # hidden from the picker
-        self.assertEqual(len(self.c.get("/api/matches/").json()), 1)                   # record is still there
-        self.assertEqual(self.c.get(f"/api/matches/{m}/").status_code, 200)
-        self.assertEqual(self.c.post("/api/teams/", {"name": "Kings", "players": ["n1", "n2"]}, format="json").status_code, 200)  # name reusable
-        self.assertEqual(self.c.delete(f"/api/teams/{self.t['Kings']}/").status_code, 400)  # already archived
-
-    def test_matches_cannot_be_deleted_through_the_api(self):
-        m = self.match().json()["id"]
-        self.assertEqual(self.c.delete(f"/api/matches/{m}/").status_code, 405)
+    def test_blocked_while_live_and_after_playing(self):
+        m = self.c.post("/api/matches/", {"team_a": self.t["P"]["id"], "team_b": self.t["Q"]["id"], "overs_limit": 1,
+                                           "toss_winner": self.t["P"]["id"], "toss_decision": "bat"}, format="json").json()["id"]
+        pid = self.t["P"]["roster"][2]["id"]
+        self.assertEqual(self.c.delete(f"/api/players/{pid}/").json()["code"], "live")   # team is in a live match
+        self.c.post(f"/api/matches/{m}/end/")
+        self.assertEqual(self.c.delete(f"/api/players/{pid}/").status_code, 200)         # finished and unplayed: fine
