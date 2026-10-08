@@ -127,3 +127,16 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# --- The Crease: the app is private. Only a match's live view (its share link) is public. ---
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["scoring.permissions.IsScorer"],
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
+}
+
+# First-run sign-up: while no account exists, the first visitor can create the scorer account.
+# On a public site set ALLOW_FIRST_RUN_SIGNUP=0 and create the account with `python manage.py createsuperuser`.
+import os
+ALLOW_FIRST_RUN_SIGNUP = os.environ.get("ALLOW_FIRST_RUN_SIGNUP", "1") == "1"

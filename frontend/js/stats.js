@@ -1,4 +1,5 @@
 (async()=>{
+  await requireLogin();
   try{
     const s=await (await fetch(API_BASE+'/api/stats/')).json();
     const none=n=>`<tr><td colspan="${n}">No balls scored yet</td></tr>`;

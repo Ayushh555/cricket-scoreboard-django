@@ -2,10 +2,11 @@ from functools import wraps
 
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from . import services as svc
+from .permissions import IsScorerOrReadOnly
 from .models import Match, Player, Team
 
 
@@ -61,6 +62,7 @@ def _state(pk):
 
 
 @api_view(["GET", "DELETE"])
+@permission_classes([IsScorerOrReadOnly])      # the live share link reads this without an account
 def match_detail(request, pk):
     if request.method == "DELETE":
         get_object_or_404(Match, pk=pk).delete()

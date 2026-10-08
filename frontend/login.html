@@ -3,28 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gully Scorer - Log in</title>
+<title>Sign in</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<script src="js/theme.js"></script>
 </head>
 <body>
 <main>
-<div class="top"><h1>Gully Scorer</h1></div>
-<div class="tabs" role="tablist">
-  <button type="button" role="tab" id="t-login" aria-selected="true" onclick="setMode('login')">Log in</button>
-  <button type="button" role="tab" id="t-register" aria-selected="false" onclick="setMode('register')">Register</button>
+<div class="brand">
+  <div class="pitch" aria-hidden="true"><span class="ball"></span><span class="line"></span></div>
+  <h1 aria-label="The Crease"><span class="the" aria-hidden="true">The</span><span class="word" aria-hidden="true"><span style="--i:0">C</span><span style="--i:1">r</span><span style="--i:2">e</span><span style="--i:3">a</span><span style="--i:4">s</span><span style="--i:5">e</span></span></h1>
+  <p>Ball-by-ball cricket scoring for the street.</p>
 </div>
-<form id="f">
-  <div class="field"><label class="lbl" for="un">Username</label><input id="un" autocomplete="username" required minlength="3" autocapitalize="none"></div>
-  <div class="field"><label class="lbl" for="pw">Password</label><input id="pw" type="password" required>
-    <span class="lbl" id="hint" hidden style="margin-top:6px">At least 8 characters, not too common, not all numbers.</span></div>
+<h2 id="title" class="ltitle">Sign in</h2>
+<p class="lbl" id="sub">Sign in to score and manage matches. Just watching? Open the live link the scorer shared with you. No account needed.</p>
+<form id="f" autocomplete="on">
+  <div class="field"><label class="lbl" for="u">Username</label><input id="u" name="username" autocomplete="username" required></div>
+  <div class="field"><label class="lbl" for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
+  <div class="field" id="p2box" hidden><label class="lbl" for="p2">Repeat password</label><input id="p2" type="password" autocomplete="new-password"></div>
   <p class="err" id="err" role="alert"></p>
-  <button class="btn" type="submit" id="go">Log in</button>
+  <button class="btn" type="submit" id="go">Sign in</button>
 </form>
 </main>
 <script src="js/config.js"></script>
-<script src="js/auth.js"></script>
 <script src="js/login.js"></script>
 </body>
 </html>

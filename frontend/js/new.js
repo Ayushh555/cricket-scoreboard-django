@@ -99,6 +99,7 @@ function tossValue(){
 async function checkLive(){
   const box=$('livewarn');
   try{
+    await requireLogin();
     const live=(await (await fetch(API_BASE+'/api/matches/')).json()).find(m=>m.status==='live');
     $('startbtn').disabled=!!live;
     if(!live){box.innerHTML='';return}
@@ -125,4 +126,4 @@ $('f').onsubmit=async e=>{
   }catch(x){$('err').textContent=x.message}
 };
 checkLive();
-(async()=>{TEAMS=await (await fetch(API_BASE+'/api/teams/')).json();panel('a');panel('b');refresh();})();
+(async()=>{await requireLogin();TEAMS=await (await fetch(API_BASE+'/api/teams/')).json();panel('a');panel('b');refresh();})();

@@ -240,3 +240,20 @@ button.big b{font:inherit;font-size:24px;font-weight:800;font-stretch:80%}
 @media(prefers-reduced-motion:reduce){.boom i,.boom .bball{display:none}.boom .bt{animation:bfade 1.2s both}.boom::before{animation:none}}
 @keyframes bfade{0%,100%{opacity:0}15%,70%{opacity:1}}
 .mods button{white-space:nowrap;padding:0 2px;font-size:13px}
+
+/* ---- sign in ---- */
+.who{font-size:13px;color:var(--mute);margin:2px 0 8px;display:flex;gap:8px;align-items:center;min-height:30px}
+.who .link{padding:4px 0}
+
+/* ---- account control, top right ---- */
+.authbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;min-height:44px;margin-bottom:2px}
+.authbar .uname{font-size:13px;color:var(--mute);max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1.5px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);font-weight:700;font-size:13px;text-decoration:none}
+.pill:hover{border-color:var(--blue)}
+.authbar .themebtn{position:static;width:38px;height:38px}
+.brand{padding-top:8px}
+
+html.gate body{visibility:hidden}
+
+.ltitle{font-size:22px;font-weight:800;font-stretch:85%;margin:6px 0 4px}
+#sub{margin-bottom:4px}

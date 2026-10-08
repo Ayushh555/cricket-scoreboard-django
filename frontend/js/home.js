@@ -3,7 +3,7 @@ document.documentElement.classList.add('js');
   const $=id=>document.getElementById(id);
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const get=u=>fetch(API_BASE+u).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()});
-  let lastBoard='', lastScore=null, lastMatch=null, lastRecent='', perfTab='runs', stats=null;
+  let A={authenticated:false}, lastBoard='', lastScore=null, lastMatch=null, lastRecent='', perfTab='runs', stats=null;
 
   // ---------- small helpers ----------
   const io='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08}):null;
@@ -28,11 +28,12 @@ document.documentElement.classList.add('js');
         <div class="bteams">${esc(s.title)}</div>
         <div class="bscore"><span class="n" id="bn">${inn.runs}</span><span class="w">/${inn.wickets}</span><span class="ov">${inn.overs} ov<br>RR ${inn.run_rate.toFixed(2)}</span></div>
         <div class="bline">${line}</div>
-        <div class="bact"><a class="bbtn" href="match.html?id=${s.id}&mode=score">Continue scoring</a><a class="blink" href="match.html?id=${s.id}&mode=live">Watch view</a></div>
+        <div class="bact">${A.authenticated?`<a class="bbtn" href="match.html?id=${s.id}&mode=score">Continue scoring</a><a class="blink" href="match.html?id=${s.id}&mode=live">Watch view</a>`:`<a class="bbtn" href="match.html?id=${s.id}&mode=live">Watch live</a>`}</div>
         ${live.length>1?`<a class="more" href="history.html">+ ${live.length-1} more live ${live.length-1===1?'match':'matches'}</a>`:''}
-      </section><button class="big end" type="button" id="endlive" data-id="${s.id}" data-title="${esc(s.title)}"><b>End this match</b><small>Only one match can run at a time. End it to start a new one.</small></button>`;
+      </section>${A.authenticated?`<button class="big end" type="button" id="endlive" data-id="${s.id}" data-title="${esc(s.title)}"><b>End this match</b><small>Only one match can run at a time. End it to start a new one.</small></button>`:''}`;
     }else{
-      h=`<a class="big primary" href="new.html"><b>New match</b><small>Pick teams, toss and start scoring</small></a>`;
+      h=A.authenticated?`<a class="big primary" href="new.html"><b>New match</b><small>Pick teams, toss and start scoring</small></a>`:
+        `<a class="big primary" href="login.html"><b>Sign in to score</b><small>Only the scorer can start and score matches. Anyone can watch.</small></a>`;
       if(!ms.length)h+=`<section class="steps rv"><h2>How it works</h2><ol>
         <li><b>Add two teams.</b> Name up to 11 players each and mark them batter, bowler or all-rounder.</li>
         <li><b>Do the toss.</b> Choose the overs, who won and what they chose.</li>
@@ -117,6 +118,7 @@ document.documentElement.classList.add('js');
   // ---------- load + auto refresh ----------
   async function load(){
     try{
+      A=await requireLogin();
       const [ms,st]=await Promise.all([get('/api/matches/'),get('/api/stats/')]);
       const live=ms.filter(m=>m.status==='live');
       const s=live.length?await get('/api/matches/'+live[0].id+'/'):null;

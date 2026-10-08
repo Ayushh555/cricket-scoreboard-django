@@ -2,6 +2,8 @@ const Q=new URLSearchParams(location.search), ID=+Q.get('id'), SCORER=Q.get('mod
 const DIS=[['bowled','Bowled'],['caught','Caught'],['lbw','LBW'],['stumped','Stumped'],['hit_wicket','Hit wkt']];
 let seenBall=null,S=null,view='score',extra='',wtype='',wwho=null,wend='',pendingW=false,msg='';
 const $=id=>document.getElementById(id);
+if(SCORER)requireLogin();
+else authReady.then(a=>{if(!a.authenticated){const n=document.querySelector('.navrow');if(n)n.remove()}});   // visitors only have the live view
 async function load(){try{S=await (await fetch(API)).json();render()}catch(e){}}
 async function post(path,body){
   const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});

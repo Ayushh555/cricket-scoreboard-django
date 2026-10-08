@@ -1,10 +1,20 @@
+from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 
+def scorer_client():
+    """An API client signed in as a scorer (writes need a login)."""
+    user, _ = User.objects.get_or_create(username="scorer")
+    c = APIClient()
+    c.force_authenticate(user)
+    return c
+
+
 class MatchFlow(TestCase):
     def setUp(self):
-        self.c = APIClient()
+        self.c = scorer_client()
         ids = []
         for name, ps in (("Kings", "A1 A2 A3 A4"), ("Strikers", "B1 B2 B3 B4")):
             self.c.post("/api/teams/", {"name": name, "players": ps.split()}, format="json")
@@ -95,7 +105,7 @@ class MatchFlow(TestCase):
 
 class Roles(TestCase):
     def test_roles_shape_openers_and_choices(self):
-        c = APIClient()
+        c = scorer_client()
         mk = lambda n, ps: c.post("/api/teams/", {"name": n, "players": ps}, format="json")
         mk("X", [{"name": "Bow1", "role": "bowler"}, {"name": "Bat1", "role": "batter"},
                  {"name": "Bat2", "role": "batter"}, {"name": "All1", "role": "allrounder"}])
@@ -162,7 +172,7 @@ class EndAndDelete(MatchFlow):
 
 class DeletePlayer(TestCase):
     def setUp(self):
-        self.c = APIClient()
+        self.c = scorer_client()
         for n, ps in (("P", ["p1", "p2", "p3"]), ("Q", ["q1", "q2", "q3"])):
             self.c.post("/api/teams/", {"name": n, "players": ps}, format="json")
         self.t = {x["name"]: x for x in self.c.get("/api/teams/").json()}
@@ -230,3 +240,63 @@ class LastBall(MatchFlow):
         self.assertGreater(self.state()["last_ball"]["id"], lb["id"])
         self.c.post(f"/api/matches/{self.m}/undo/")
         self.assertEqual(self.state()["last_ball"]["id"], lb["id"])      # undo goes back to the earlier ball
+
+
+class Login(TestCase):
+    def setUp(self):
+        cache.clear()                      # the login throttle lives in the cache
+        self.c = APIClient()
+
+    def test_first_run_register_then_closed(self):
+        self.assertTrue(self.c.get("/api/auth/me/").json()["can_register"])
+        r = self.c.post("/api/auth/register/", {"username": "ayush", "password": "short"}, format="json")
+        self.assertEqual(r.status_code, 400)                                     # password too weak
+        r = self.c.post("/api/auth/register/", {"username": "ayush", "password": "cricket-2026-ok"}, format="json")
+        self.assertEqual((r.status_code, r.json()["authenticated"]), (201, True))
+        self.assertTrue(User.objects.get(username="ayush").is_superuser)
+        r = APIClient().post("/api/auth/register/", {"username": "intruder", "password": "cricket-2026-ok"}, format="json")
+        self.assertEqual(r.status_code, 403)                                     # no second sign-up
+        self.assertFalse(APIClient().get("/api/auth/me/").json()["can_register"])
+
+    def test_signup_can_be_switched_off(self):
+        from django.test import override_settings
+        with override_settings(ALLOW_FIRST_RUN_SIGNUP=False):
+            self.assertFalse(self.c.get("/api/auth/me/").json()["can_register"])
+            r = self.c.post("/api/auth/register/", {"username": "ayush", "password": "cricket-2026-ok"}, format="json")
+            self.assertEqual(r.status_code, 403)
+            self.assertFalse(User.objects.exists())
+
+    def test_only_the_live_view_is_public(self):
+        owner = scorer_client()
+        owner.post("/api/teams/", {"name": "P", "players": ["p1", "p2"]}, format="json")
+        owner.post("/api/teams/", {"name": "Q", "players": ["q1", "q2"]}, format="json")
+        t = {x["name"]: x["id"] for x in owner.get("/api/teams/").json()}
+        m = owner.post("/api/matches/", {"team_a": t["P"], "team_b": t["Q"], "overs_limit": 1,
+                                         "toss_winner": t["P"], "toss_decision": "bat"}, format="json").json()["id"]
+        self.assertEqual(self.c.get(f"/api/matches/{m}/").status_code, 200)       # share link works for anyone
+        for url in ("/api/matches/", "/api/teams/", "/api/stats/"):
+            self.assertEqual(self.c.get(url).status_code, 403)                    # everything else needs a login
+        self.assertEqual(self.c.post("/api/teams/", {"name": "X", "players": ["a", "b"]}, format="json").status_code, 403)
+        self.assertEqual(self.c.delete(f"/api/matches/{m}/").status_code, 403)
+        self.assertEqual(self.c.post(f"/api/matches/{m}/end/").status_code, 403)
+        self.assertEqual(self.c.get("/api/auth/me/").status_code, 200)            # the sign-in page can always ask who you are
+
+    def test_login_logout_and_csrf(self):
+        User.objects.create_user("owner", password="cricket-2026-ok")
+        c = APIClient(enforce_csrf_checks=True)
+        c.get("/api/auth/me/")                                                   # sets the csrf cookie
+        self.assertEqual(c.post("/api/auth/login/", {"username": "owner", "password": "nope"}, format="json").status_code, 400)
+        r = c.post("/api/auth/login/", {"username": "owner", "password": "cricket-2026-ok"}, format="json")
+        self.assertEqual((r.status_code, r.json()["username"]), (200, "owner"))
+        body = {"name": "Kings", "players": ["a", "b"]}
+        self.assertEqual(c.post("/api/teams/", body, format="json").status_code, 403)      # signed in but no csrf header
+        token = c.cookies["csrftoken"].value
+        self.assertEqual(c.post("/api/teams/", body, format="json", HTTP_X_CSRFTOKEN=token).status_code, 200)
+        c.post("/api/auth/logout/", format="json", HTTP_X_CSRFTOKEN=token)
+        self.assertFalse(c.get("/api/auth/me/").json()["authenticated"])
+
+    def test_login_is_throttled(self):
+        User.objects.create_user("owner", password="cricket-2026-ok")
+        codes = [self.c.post("/api/auth/login/", {"username": "owner", "password": "bad"}, format="json").status_code
+                 for _ in range(12)]
+        self.assertEqual(codes[-1], 429)
