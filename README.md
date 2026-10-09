@@ -27,4 +27,6 @@ Open http://127.0.0.1:8000/  ->  New match.   Tests: python manage.py test scori
 
    ## 🚧 **Project Status:**  This Project is Under Development
 
+   ## By Time new things will be add on the website 
+
 
