@@ -16,6 +16,13 @@
 <form id="f">
   <div class="field" id="pa"></div><div class="field" id="pb"></div>
   <div class="field"><label class="lbl" for="ov">Overs per side</label><input id="ov" type="number" min="1" max="50" value="6"></div>
+  <details class="field rules" id="rules">
+    <summary class="lbl">Match rules (optional)</summary>
+    <label class="chk"><input type="checkbox" id="rl-lm"> <span><b>Last man batting.</b> The last batter plays on alone instead of the innings ending one wicket early.</span></label>
+    <label class="chk"><input type="checkbox" id="rl-fh"> <span><b>Free hit.</b> After a no-ball, the next ball can only get a batter out by a run out.</span></label>
+    <label class="lbl" for="rl-mb" style="margin-top:10px">Max overs per bowler</label>
+    <input id="rl-mb" type="number" min="1" max="50" placeholder="No limit" inputmode="numeric">
+  </details>
   <div class="field toss">
     <span class="lbl">Toss</span>
     <div class="seg" role="tablist" aria-label="Toss type">

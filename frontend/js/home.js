@@ -33,7 +33,7 @@ document.documentElement.classList.add('js');
       </section>${A.authenticated?`<button class="big end" type="button" id="endlive" data-id="${s.id}" data-title="${esc(s.title)}"><b>End this match</b><small>Only one match can run at a time. End it to start a new one.</small></button>`:''}`;
     }else{
       h=A.authenticated?`<a class="big primary" href="new.html"><b>New match</b><small>Pick teams, toss and start scoring</small></a>`:
-        `<a class="big primary" href="login.html"><b>Sign in to score</b><small>Only the scorer can start and score matches. Anyone can watch.</small></a>`;
+        `<a class="big primary" href="login.html"><b>Sign in to score</b><small>Create a free account to keep your own teams and score your own matches. Anyone can watch.</small></a>`;
       if(!ms.length)h+=`<section class="steps rv"><h2>How it works</h2><ol>
         <li><b>Add two teams.</b> Name up to 11 players each and mark them batter, bowler or all-rounder.</li>
         <li><b>Do the toss.</b> Choose the overs, who won and what they chose.</li>

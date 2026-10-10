@@ -10,5 +10,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("scoring.urls")),                                   # /api/...
     path("", never_cache(serve), {"document_root": FRONTEND, "path": "index.html"}),  # home page
-    re_path(r"^(?P<path>(?:css|js)/.+|[\w-]+\.html)$", never_cache(serve), {"document_root": FRONTEND}),  # never cached: edits show up on refresh
+    re_path(r"^(?P<path>(?:css|js)/.+|[\w-]+\.html|sw\.js)$", never_cache(serve), {"document_root": FRONTEND}),  # never cached: edits show up on refresh
 ]

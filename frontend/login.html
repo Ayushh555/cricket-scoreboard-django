@@ -22,9 +22,11 @@
   <div class="field"><label class="lbl" for="u">Username</label><input id="u" name="username" autocomplete="username" required></div>
   <div class="field"><label class="lbl" for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
   <div class="field" id="p2box" hidden><label class="lbl" for="p2">Repeat password</label><input id="p2" type="password" autocomplete="new-password"></div>
+  <p class="ok" id="ok" role="status"></p>
   <p class="err" id="err" role="alert"></p>
   <button class="btn" type="submit" id="go">Sign in</button>
 </form>
+<p class="lbl swap" id="swapbox"><span id="swaptxt"></span> <a href="#" id="swap"></a></p>
 </main>
 <script src="js/config.js"></script>
 <script src="js/login.js"></script>

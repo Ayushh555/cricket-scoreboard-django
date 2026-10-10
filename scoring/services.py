@@ -23,7 +23,7 @@ class RuleError(Exception):
 
 # ---------- setup ----------
 @transaction.atomic
-def create_team(name, players):
+def create_team(name, players, owner=None):
     name = (name or "").strip()
     roster, seen = [], set()
     for item in players:
@@ -38,9 +38,9 @@ def create_team(name, players):
         raise RuleError("A team needs at least 2 players.")
     if len(roster) > 30:
         raise RuleError("That is too many players for one team.")
-    if Team.objects.filter(name__iexact=name).exists():
-        raise RuleError("A team with that name already exists.")
-    team = Team.objects.create(name=name)
+    if Team.objects.filter(owner=owner, name__iexact=name).exists():
+        raise RuleError("You already have a team with that name.")
+    team = Team.objects.create(name=name, owner=owner)
     Player.objects.bulk_create([Player(name=n, role=r, team=team) for n, r in roster])
     return team
 
@@ -51,15 +51,15 @@ def _new_innings(match, number, bat, bowl):
 
 
 @transaction.atomic
-def create_match(team_a, team_b, overs, toss_winner, decision):
+def create_match(team_a, team_b, overs, toss_winner, decision, owner=None, last_man=False, free_hit=False, max_bowler=0):
     try:
-        a, b = Team.objects.get(pk=team_a), Team.objects.get(pk=team_b)
+        a, b = Team.objects.get(pk=team_a, owner=owner), Team.objects.get(pk=team_b, owner=owner)
         overs = int(overs)
     except (Team.DoesNotExist, TypeError, ValueError):
         raise RuleError("Pick two teams and a valid number of overs.")
-    live = Match.objects.filter(status=Match.Status.LIVE).first()
+    live = Match.objects.filter(owner=owner, status=Match.Status.LIVE).first()
     if live:
-        raise RuleError(f"A match is already in progress ({live}). Only one match can run at a time. "
+        raise RuleError(f"You already have a match in progress ({live}). Only one of your matches can run at a time. "
                         "End it before starting a new one.", "live_match", match_id=live.id, match_title=str(live))
     if a.pk == b.pk:
         raise RuleError("A team can't play itself.")
@@ -67,14 +67,24 @@ def create_match(team_a, team_b, overs, toss_winner, decision):
         raise RuleError("Each team needs at least 2 players.")
     if not 1 <= overs <= 50:
         raise RuleError("Overs must be between 1 and 50.")
+    try:
+        max_bowler = int(max_bowler or 0)
+    except (TypeError, ValueError):
+        raise RuleError("Max overs per bowler must be a number.")
+    if not 0 <= max_bowler <= 50:
+        raise RuleError("Max overs per bowler must be between 1 and 50, or empty for no limit.")
+    if max_bowler and min(a.players.count(), b.players.count()) * max_bowler < overs:
+        raise RuleError(f"With {max_bowler} over{'' if max_bowler == 1 else 's'} each, a team with so few players "
+                        f"can't bowl {overs} overs. Raise the limit or add players.")
     if toss_winner not in (a.pk, b.pk) or decision not in ("bat", "bowl"):
         raise RuleError("Choose who won the toss and what they chose.")
     winner = a if toss_winner == a.pk else b
     other = b if winner is a else a
     first, second = (winner, other) if decision == "bat" else (other, winner)
     m = Match.objects.create(
-        team_a=a, team_b=b, overs_limit=overs, toss_winner=winner,
+        owner=owner, team_a=a, team_b=b, overs_limit=overs, toss_winner=winner,
         toss_decision=decision, status=Match.Status.LIVE,
+        last_man_batting=bool(last_man), free_hit=bool(free_hit), max_overs_per_bowler=max_bowler,
     )
     _new_innings(m, 1, first, second)
     return m
@@ -86,7 +96,30 @@ def current_innings(match):
 
 
 def max_wickets(inn):
-    return max(inn.batting_team.players.count() - 1, 1)
+    n = inn.batting_team.players.count()
+    return n if inn.match.last_man_batting else max(n - 1, 1)     # last man batting: everyone must be out
+
+
+def lone(inn):
+    """The last batter playing on alone is stored as striker == non-striker."""
+    return bool(inn.striker_id) and inn.striker_id == inn.non_striker_id
+
+
+def free_hit_next(inn):
+    """True when the next ball is a free hit: it follows a no-ball (and stays free through wides)."""
+    fh = False
+    for extra in inn.balls.values_list("extra_type", flat=True):
+        fh = extra == NB or (fh and extra == WD)
+    return fh and inn.match.free_hit
+
+
+def _bowler_legal(inn, player_id):
+    return inn.balls.filter(bowler_id=player_id).exclude(extra_type__in=ILLEGAL).count()
+
+
+def _capped(inn, player_id):
+    cap = inn.match.max_overs_per_bowler
+    return bool(cap) and _bowler_legal(inn, player_id) >= cap * 6
 
 
 def _plural(n, word):
@@ -114,10 +147,12 @@ def _finish_innings(match, inn):
 
 
 @transaction.atomic
-def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=""):
+def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end="", cid=""):
     inn = current_innings(match)
     if not inn:
         raise RuleError("This match is over.")
+    if cid and Ball.objects.filter(innings__match=match, cid=cid).exists():
+        return                                    # a retried offline ball: already counted
     if not (inn.striker_id and inn.non_striker_id):
         raise RuleError("Choose the next batter first.", "need_batter")
     if not inn.bowler_id:
@@ -135,13 +170,15 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=""):
     if end not in ("", "striker", "non"):
         raise RuleError("Unknown end.")
 
+    if wicket and wicket != "run_out" and free_hit_next(inn):
+        raise RuleError("Free hit: only a run out counts on this ball.", "free_hit")
     legal_before = inn.legal_balls
     legal = extra not in ILLEGAL
     s, n, bowler = inn.striker, inn.non_striker, inn.bowler
     ball = Ball(
         innings=inn, over_number=legal_before // 6,
         ball_in_over=legal_before % 6 + (1 if legal else 0),
-        batter=s, non_striker=n, bowler=bowler, extra_type=extra, wicket_type=wicket,
+        batter=s, non_striker=n, bowler=bowler, extra_type=extra, wicket_type=wicket, cid=cid or "",
     )
     if extra == WD:
         ball.extra_runs = 1 + runs
@@ -164,7 +201,12 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=""):
     ball.save()
 
     # New state.
-    if wicket == "run_out":
+    was_lone = s.id == n.id
+    if was_lone:
+        if out:
+            s = n = None                          # the last batter is out: the innings is over
+        # no partner to swap ends with, so strike never changes
+    elif wicket == "run_out":
         # The dismissed batter is out at the end they were running to, unless the scorer says otherwise.
         # The new batter takes that end; whoever stands at the striker's end faces the next ball.
         if not end:
@@ -176,8 +218,12 @@ def add_ball(match, runs=0, extra="", wicket="", dismissed=None, end=""):
             s, n = (None, n) if out.id == s.id else (s, None)
         if runs % 2:
             s, n = n, s
+    if match.last_man_batting and (s is None) != (n is None):
+        used = _used_batters(inn) | {p.id for p in (s, n) if p}
+        if not inn.batting_team.players.exclude(pk__in=used).exists():
+            s = n = s or n                        # nobody left to bat with: the last man plays on alone
     if legal and (legal_before + 1) % 6 == 0:
-        s, n, bowler = n, s, None
+        s, n, bowler = n, s, None                 # ends change (a no-op for a lone batter)
     inn.striker, inn.non_striker, inn.bowler = s, n, bowler
 
     legal_now = legal_before + (1 if legal else 0)
@@ -265,6 +311,8 @@ def select(match, role, player_id):
             raise RuleError("That player isn't in the bowling team.")
         if p.id == _last_over_bowler(inn):
             raise RuleError("A bowler can't bowl two overs in a row.")
+        if _capped(inn, p.id):
+            raise RuleError(f"{p.name} has bowled the maximum {inn.match.max_overs_per_bowler} overs.")
         inn.bowler = p
     else:
         raise RuleError("Unknown role.")
@@ -334,6 +382,78 @@ def scorecard(inn):
     return {"batting": list(bat.values()), "bowling": bowling, "yet_to_bat": yet}
 
 
+def breakdown(inn):
+    """Over-by-over runs, the worm line, fall of wickets and partnerships for one innings."""
+    overs, fow, parts, cur, run, legal = {}, [], [], None, 0, 0
+    for b in inn.balls.select_related("batter", "non_striker", "bowler", "dismissed_player"):
+        run += b.total_runs
+        o = overs.setdefault(b.over_number, {"over": b.over_number + 1, "runs": 0, "wickets": 0,
+                                             "bowler": b.bowler.name, "balls": []})
+        o["runs"] += b.total_runs
+        o["wickets"] += bool(b.wicket_type)
+        t, k = label(b)
+        o["balls"].append({"t": t, "k": k})
+        key = frozenset((b.batter_id, b.non_striker_id))
+        if cur is None or cur["key"] != key:
+            cur = {"key": key, "a": b.batter.name, "b": b.non_striker.name if b.non_striker_id != b.batter_id else "",
+                   "runs": 0, "balls": 0}
+            parts.append(cur)
+        cur["runs"] += b.total_runs
+        cur["balls"] += b.is_legal
+        legal += b.is_legal
+        if b.wicket_type:
+            fow.append({"n": len(fow) + 1, "score": run, "name": b.dismissed_player.name,
+                        "over": f"{legal // 6}.{legal % 6}"})
+    rows = [overs[k] for k in sorted(overs)]
+    total = 0
+    for r in rows:
+        total += r["runs"]
+        r["total"] = total
+    return {"by_over": rows, "fow": fow,
+            "partnerships": [{"a": x["a"], "b": x["b"], "runs": x["runs"], "balls": x["balls"],
+                              "k": "-".join(map(str, sorted(x["key"])))} for x in parts]}
+
+
+def summarize(m, inns):
+    """A few plain-English lines about the finished match and a player of the match."""
+    if m.status != Match.Status.COMPLETED:
+        return [], None
+    pts = {}          # player name -> [points, team, runs, balls, wickets, runs conceded, legal balls]
+
+    def rec(name, team):
+        return pts.setdefault((name, team), {"pts": 0, "runs": 0, "balls": 0, "wk": 0, "conc": 0, "legal": 0, "bat": False, "bowl": False})
+    lines, best_bat = [], None
+    for k, i in enumerate(inns):
+        card = scorecard(i)
+        team, other = i.batting_team.name, i.bowling_team.name
+        top = max(card["batting"], key=lambda x: (x["runs"], -x["balls"]), default=None)
+        for x in card["batting"]:
+            if x["balls"]:
+                r = rec(x["name"], team)
+                r["runs"] += x["runs"]; r["balls"] += x["balls"]; r["bat"] = True
+                r["pts"] += x["runs"] + x["fours"] + 2 * x["sixes"]
+        for x in card["bowling"]:
+            r = rec(x["name"], other)
+            r["wk"] += x["wickets"]; r["conc"] += x["runs"]; r["legal"] += int(x["overs"].split(".")[0]) * 6 + int(x["overs"].split(".")[1]); r["bowl"] = True
+            r["pts"] += 20 * x["wickets"]
+        if top and top["balls"]:
+            lines.append(f"{team}: top score {top['name']} {top['runs']} ({top['balls']}).")
+    bowlers = [(n, t, r) for (n, t), r in pts.items() if r["bowl"] and r["legal"]]
+    if bowlers:
+        n, t, r = max(bowlers, key=lambda z: (z[2]["wk"], -z[2]["conc"]))
+        lines.append(f"Best bowling: {n} {r['wk']}/{r['conc']} ({r['legal'] // 6}.{r['legal'] % 6}).")
+    potm = None
+    if pts:
+        (n, t), r = max(pts.items(), key=lambda kv: (kv[1]["pts"], kv[1]["runs"]))
+        bits = []
+        if r["bat"]:
+            bits.append(f"{r['runs']} ({r['balls']})")
+        if r["bowl"] and r["legal"]:
+            bits.append(f"{r['wk']}/{r['conc']}")
+        potm = {"name": n, "team": t, "line": " and ".join(bits)}
+    return lines, potm
+
+
 def _live(m, cur, first_total):
     legal = cur.legal_balls
     need = ("batter" if not (cur.striker_id and cur.non_striker_id)
@@ -345,7 +465,7 @@ def _live(m, cur, first_total):
                       key=lambda p: BAT_RANK[p.role])
     elif need == "bowler":
         last = _last_over_bowler(cur)
-        pool = [p for p in cur.bowling_team.players.order_by("id") if p.id != last]
+        pool = [p for p in cur.bowling_team.players.order_by("id") if p.id != last and not _capped(cur, p.id)]
         # Bowlers and all-rounders only; fall back to everyone if that leaves nobody.
         opts = sorted([p for p in pool if p.role != "batter"] or pool, key=lambda p: BOWL_RANK[p.role])
     over_idx = legal // 6 - 1 if need == "bowler" and legal else legal // 6
@@ -356,6 +476,10 @@ def _live(m, cur, first_total):
         "over_no": over_idx + 1, "opening": not cur.balls.exists(),
         "this_over": [dict(t=t, k=k) for t, k in map(label, cur.balls.filter(over_number=over_idx))],
         "balls_left": m.overs_limit * 6 - legal, "target": None, "runs_needed": None,
+        "lone": lone(cur), "free_hit": free_hit_next(cur),
+        "last_bowler": _last_over_bowler(cur),
+        "roster": {"bat": [p(x) for x in cur.batting_team.players.order_by("id")],
+                   "bowl": [p(x) for x in cur.bowling_team.players.order_by("id")]},
     }
     if cur.number == 2:
         d["target"] = first_total + 1
@@ -371,14 +495,17 @@ def _last_ball(m):
 def match_state(m):
     inns = list(m.innings.select_related("batting_team", "bowling_team", "striker", "non_striker", "bowler"))
     cur = next((i for i in inns if not i.is_complete), None)
+    summary, potm = summarize(m, inns)
     return {
         "id": m.id, "title": str(m), "overs_limit": m.overs_limit, "status": m.status, "result": m.result,
         "toss": f"{m.toss_winner} won the toss and chose to {m.toss_decision}",
         "innings": [{"number": i.number, "team": i.batting_team.name, "runs": i.total_runs,
                      "wickets": i.wickets, "overs": i.overs_display, "run_rate": i.run_rate,
-                     **scorecard(i)} for i in inns],
+                     **scorecard(i), **breakdown(i)} for i in inns],
         "live": _live(m, cur, inns[0].total_runs) if cur else None,
         "last_ball": _last_ball(m),
+        "rules": {"last_man": m.last_man_batting, "free_hit": m.free_hit, "max_bowler": m.max_overs_per_bowler},
+        "summary": summary, "potm": potm,
     }
 
 
@@ -389,12 +516,13 @@ def match_brief(m):
                        for i in m.innings.select_related("batting_team")]}
 
 
-def player_stats():
-    names = {p.id: (p.name, p.team.name) for p in Player.objects.select_related("team")}
-    bat = Ball.objects.values("batter_id").annotate(
+def player_stats(owner=None):
+    names = {p.id: (p.name, p.team.name) for p in Player.objects.filter(team__owner=owner).select_related("team")}
+    balls = Ball.objects.filter(innings__match__owner=owner)
+    bat = balls.values("batter_id").annotate(
         runs=Sum("runs_off_bat"), faced=Count("id", filter=~Q(extra_type=WD)),
         fours=Count("id", filter=Q(runs_off_bat=4)), sixes=Count("id", filter=Q(runs_off_bat=6)))
-    bowl = Ball.objects.values("bowler_id").annotate(
+    bowl = balls.values("bowler_id").annotate(
         legal=Count("id", filter=~Q(extra_type__in=ILLEGAL)), off_bat=Sum("runs_off_bat"),
         pen=Coalesce(Sum("extra_runs", filter=Q(extra_type__in=ILLEGAL)), 0),
         wkts=Count("id", filter=~Q(wicket_type="") & ~Q(wicket_type="run_out")))
@@ -405,10 +533,10 @@ def player_stats():
                 "overs": f"{r['legal'] // 6}.{r['legal'] % 6}", "runs": r["off_bat"] + r["pen"],
                 "wickets": r["wkts"],
                 "econ": round((r["off_bat"] + r["pen"]) * 6 / r["legal"], 1) if r["legal"] else 0} for r in bowl]
-    agg = Ball.objects.aggregate(
+    agg = balls.aggregate(
         bat=Coalesce(Sum("runs_off_bat"), 0), extra=Coalesce(Sum("extra_runs"), 0),
         wickets=Count("id", filter=~Q(wicket_type="")), sixes=Count("id", filter=Q(runs_off_bat=6)))
-    totals = {"matches": Match.objects.count(), "teams": Team.objects.count(),
+    totals = {"matches": Match.objects.filter(owner=owner).count(), "teams": Team.objects.filter(owner=owner).count(),
               "runs": agg["bat"] + agg["extra"], "wickets": agg["wickets"], "sixes": agg["sixes"]}
     return {"totals": totals, "batting": sorted(batting, key=lambda x: -x["runs"])[:10],
             "bowling": sorted(bowling, key=lambda x: (-x["wickets"], x["econ"]))[:10]}

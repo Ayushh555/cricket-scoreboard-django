@@ -140,3 +140,7 @@ REST_FRAMEWORK = {
 # On a public site set ALLOW_FIRST_RUN_SIGNUP=0 and create the account with `python manage.py createsuperuser`.
 import os
 ALLOW_FIRST_RUN_SIGNUP = os.environ.get("ALLOW_FIRST_RUN_SIGNUP", "1") == "1"
+
+# Anyone can register and then keep their own teams and score their own matches.
+# The owner manages accounts on admin.html. Set ALLOW_OPEN_SIGNUP=0 to close registration.
+ALLOW_OPEN_SIGNUP = os.environ.get("ALLOW_OPEN_SIGNUP", "1") == "1"

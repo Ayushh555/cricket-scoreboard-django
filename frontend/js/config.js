@@ -16,7 +16,14 @@ window.fetch = (url, opts = {}) => {
   return _fetch(url, o);
 };
 // Who is signed in? Resolves to {authenticated, username, can_register}.
-const authReady = fetch(API_BASE + '/api/auth/me/').then(r => r.json()).catch(() => ({authenticated: false}));
+// With no signal the last known answer is used, so a scorer can reload the page and keep scoring offline.
+const authReady = fetch(API_BASE + '/api/auth/me/').then(r => r.json()).then(j => {
+  try { j.authenticated ? localStorage.setItem('crease_auth', JSON.stringify(j)) : localStorage.removeItem('crease_auth'); } catch (e) {}
+  return j;
+}).catch(() => {
+  try { const c = JSON.parse(localStorage.getItem('crease_auth') || 'null'); if (c && c.authenticated) return c; } catch (e) {}
+  return {authenticated: false};
+});
 // Pages that only the scorer may use send visitors to the sign-in page and bring them back afterwards.
 async function requireLogin() {
   const a = await authReady;
@@ -27,7 +34,12 @@ async function requireLogin() {
   document.documentElement.classList.remove('gate');
   return a;
 }
-async function signOut() { await fetch(API_BASE + '/api/auth/logout/', {method: 'POST'}); location.href = 'index.html'; }
+async function signOut() {
+  try { localStorage.removeItem('crease_auth'); } catch (e) {}
+  await fetch(API_BASE + '/api/auth/logout/', {method: 'POST'}); location.href = 'index.html';
+}
+// Lets pages load with no signal (pages and scripts only; scores always come from the server).
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // Account control in the top-right corner of every page.
 document.addEventListener('DOMContentLoaded', async () => {
@@ -36,7 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const bar = document.createElement('div'); bar.className = 'authbar'; bar.id = 'authbar'; main.prepend(bar);
   const a = await authReady;
   bar.innerHTML = a.authenticated
-    ? `<span class="uname">${esc(a.username)}</span><button class="pill" id="signout" type="button">Sign out</button>`
+    ? `<a class="uname" href="account.html">${esc(a.username)}</a><button class="pill" id="signout" type="button">Sign out</button>`
     : `<a class="pill" href="login.html?next=${encodeURIComponent(location.pathname.split('/').pop() + location.search)}">Sign in</a>`;
   const so = document.getElementById('signout'); if (so) so.onclick = signOut;
   const th = document.getElementById('theme'); if (th) bar.appendChild(th);   // home page: theme toggle sits beside it

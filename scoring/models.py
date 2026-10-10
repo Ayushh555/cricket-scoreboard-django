@@ -1,10 +1,16 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Sum
 
 
 class Team(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE,
+                              related_name="teams")      # every account keeps its own teams
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["owner", "name"], name="unique_team_name_per_owner")]
 
     def __str__(self):
         return self.name
@@ -37,6 +43,8 @@ class Match(models.Model):
         BAT = "bat", "Bat"
         BOWL = "bowl", "Bowl"
 
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE,
+                              related_name="matches")    # only the owner can score or delete it
     team_a = models.ForeignKey(Team, on_delete=models.PROTECT, related_name="matches_as_a")
     team_b = models.ForeignKey(Team, on_delete=models.PROTECT, related_name="matches_as_b")
     overs_limit = models.PositiveSmallIntegerField(default=6)
@@ -46,6 +54,10 @@ class Match(models.Model):
     toss_decision = models.CharField(max_length=4, choices=TossDecision.choices, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.UPCOMING)
     result = models.CharField(max_length=200, blank=True)
+    # House rules, chosen when the match is set up.
+    last_man_batting = models.BooleanField(default=False)      # the last batter plays on alone
+    free_hit = models.BooleanField(default=False)              # the ball after a no-ball: only a run out counts
+    max_overs_per_bowler = models.PositiveSmallIntegerField(default=0)   # 0 = no limit
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -140,6 +152,7 @@ class Ball(models.Model):
         Player, on_delete=models.PROTECT, null=True, blank=True, related_name="dismissals"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    cid = models.CharField(max_length=40, blank=True, default="", db_index=True)   # offline sync: stops a retry scoring twice
 
     class Meta:
         ordering = ["id"]  # delivery order; undo = delete the last row

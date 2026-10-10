@@ -120,7 +120,8 @@ $('f').onsubmit=async e=>{
     const t=tossValue();
     const a=await teamId('a'), b=await teamId('b');
     const r=await fetch(API_BASE+'/api/matches/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      team_a:a,team_b:b,overs_limit:+$('ov').value,toss_winner:t.w==='a'?a:b,toss_decision:t.d})});
+      team_a:a,team_b:b,overs_limit:+$('ov').value,toss_winner:t.w==='a'?a:b,toss_decision:t.d,
+      last_man:$('rl-lm').checked,free_hit:$('rl-fh').checked,max_bowler:+$('rl-mb').value||0})});
     const j=await r.json(); if(!r.ok){if(j.code==='live_match')checkLive();throw new Error(j.error)}
     location.href='match.html?id='+j.id+'&mode=score';
   }catch(x){$('err').textContent=x.message}

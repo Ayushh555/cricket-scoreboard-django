@@ -13,15 +13,31 @@
 <main>
 <div class="navrow"><a href="index.html">Home</a></div>
 <div class="top"><h1 id="title"></h1><span id="sub"></span></div>
+<div class="sync" id="sync" role="status" aria-live="polite"></div>
 <div class="hero" id="hero"></div>
 <div class="chase" id="chase"></div>
 <div class="tabs" role="tablist">
   <button role="tab" id="t-score" aria-selected="true" onclick="tab('score')">Score</button>
   <button role="tab" id="t-card" aria-selected="false" onclick="tab('card')">Scorecard</button>
+  <button role="tab" id="t-overs" aria-selected="false" onclick="tab('overs')">Overs</button>
 </div>
 <div id="view"></div>
+<details class="share" id="share">
+  <summary>Share this match</summary>
+  <div class="sharebody">
+    <div class="shbtns">
+      <a class="pill" id="wa" target="_blank" rel="noopener">WhatsApp</a>
+      <button class="pill" id="cp" type="button">Copy link</button>
+      <button class="pill" id="img" type="button">Scorecard image</button>
+    </div>
+    <div class="qrbox"><div id="qr" aria-label="QR code for the live link"></div><span class="lbl">Scan to follow the score live. No account needed.</span></div>
+    <div id="cardout" hidden><img id="cardimg" alt="Scorecard image"><a class="pill" id="cardsave" download="scorecard.png">Save image</a></div>
+  </div>
+</details>
 </main>
 <script src="js/config.js"></script>
+<script src="js/qr.js"></script>
+<script src="js/engine.js"></script>
 <script src="js/match.js"></script>
 </body>
 </html>
