@@ -1,27 +1,46 @@
-# The Crease (frontend + backend)
+# 🏏 The Crease
 
-Ball-by-ball cricket scorer. Django REST API + plain HTML/CSS/JS frontend, one project, one command.
+A live cricket scoring web application that lets you manage matches ball by ball and share live scores with others.
 
-    python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
-    pip install -r requirements.txt
-    python manage.py migrate
-    python manage.py runserver
+## ✨ Features
+- Ball-by-ball scoring and wicket management
+- Track overs, innings, targets, and match results
+- Live score sharing through a read-only link
+- Detailed scorecards and match history
+- Manage teams and playing XI
+- Undo scoring actions
 
-Open http://127.0.0.1:8000/  ->  New match.   Tests: python manage.py test scoring
+## 🛠️ Tech Stack
+- **Backend:** Python, Django, Django REST Framework
+- **Frontend:** HTML, CSS, JavaScript
+- **Database:** SQLite
 
-    cricket_scorer/
-    ├── manage.py
-    ├── cricket_project/          settings.py, urls.py (also serves frontend/)
-    ├── scoring/                  BACKEND
-    │   ├── models.py             Team, Player, Match, Innings, Ball
-    │   ├── services.py           cricket rules: overs, extras, wickets, target, result, undo
-    │   ├── views.py  urls.py     REST API under /api/
-    │   ├── admin.py  admin_api.py  tests.py  migrations/
-    └── frontend/                 FRONTEND
-        ├── index.html            match list + player stats
-        ├── new.html              new match setup
-        ├── match.html            ?id=1&mode=score (scorer)  |  ?id=1&mode=live (shareable live view)
-        ├── css/style.css
-        └── js/  config.js  home.js  new.js  match.js
+## 🚀 Getting Started
 
+```bash
+git clone https://github.com/Ayushh555/cricket-scoreboard-django.git
+cd cricket-scoreboard-django
+```
 
+Create and activate a virtual environment, then install dependencies:
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+Open `http://127.0.0.1:8000/` in your browser.
+
+## 👨‍💻 Developer
+
+**Ayush Chandel**
+
+- GitHub: [Ayushh555](https://github.com/Ayushh555)
+- LinkedIn: [Connect with me](https://www.linkedin.com/in/ayush-chandel-a2b726252/)
+
+---
+
+⭐ If you like this project, consider giving it a star!
