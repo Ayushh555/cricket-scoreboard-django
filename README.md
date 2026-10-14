@@ -42,5 +42,3 @@ Open `http://127.0.0.1:8000/` in your browser.
 - LinkedIn: [Connect with me](https://www.linkedin.com/in/ayush-chandel-a2b726252/)
 
 ---
-
-⭐ If you like this project, consider giving it a star!
