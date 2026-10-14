@@ -12,7 +12,7 @@ A live cricket scoring web application that lets you manage matches ball by ball
 
 ## 🛠️ Tech Stack
 - **Backend:** Python, Django, Django REST Framework
-- **Frontend:** HTML, CSS, JavaScript
+- **Frontend:** HTML, CSS, JavaScript, Bootstrap
 - **Database:** SQLite
 
 ## 🚀 Getting Started
